@@ -145,7 +145,7 @@ Remember: You represent ECOTEC - a premium computer and mobile shop in Sri Lanka
 
 class GeminiService {
   private apiKey: string | null = null;
-  private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
   private conversationHistory: ChatMessage[] = [];
 
   constructor() {
@@ -438,7 +438,7 @@ Focus on accuracy with real product names and realistic Sri Lankan market prices
 
     try {
       // Use Gemini Vision model
-      const visionUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+      const visionUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
       
       const prompt = `You are an expert tech product identifier with knowledge of Sri Lankan market prices.
 
