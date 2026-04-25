@@ -18,6 +18,7 @@ import {
   Building2, Layers, Hash, Barcode, RefreshCw, ImageIcon, Upload, X, Shield, AlertCircle, Clipboard, CheckCircle2,
   Search, Sparkles, Brain, Loader2, Wand2, Globe, TrendingUp
 } from 'lucide-react';
+import { getImageUrl } from '../lib/utils';
 
 // Computer shop categories
 const categoryOptions = [
@@ -1275,7 +1276,7 @@ export const ProductForm: React.FC = () => {
                 theme === 'dark' ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'
               }`}>
                 <img 
-                  src={formData.image} 
+                  src={getImageUrl(formData.image)} 
                   alt="Product preview" 
                   className="w-full h-48 object-contain"
                 />

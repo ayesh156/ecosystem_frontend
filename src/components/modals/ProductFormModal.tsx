@@ -16,6 +16,7 @@ import { brandService, type APIBrand } from '../../services/brandService';
 import { geminiService } from '../../services/geminiService';
 import { uploadProductImage, deleteProductImage } from '../../services/imageUploadService';
 import { compressImage, validateImageFile } from '../../lib/imageCompression';
+import { getImageUrl } from '../../lib/utils';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -459,7 +460,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const handleRemoveImage = async () => {
     if (formData.image) {
       // Check if it's a local upload (starts with /uploads/)
-      if (formData.image.startsWith('/uploads/')) {
+      if (formData.image.startsWith('/uploads/') || formData.image.startsWith('/api/v1/uploads/')) {
         try {
           const filename = formData.image.split('/').pop();
           if (filename) {
@@ -754,7 +755,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 theme === 'dark' ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'
               }`}>
                 <img 
-                  src={formData.image} 
+                  src={getImageUrl(formData.image)} 
                   alt="Product preview" 
                   className="w-full h-32 object-contain"
                 />

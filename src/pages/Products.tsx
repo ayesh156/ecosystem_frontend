@@ -10,7 +10,7 @@ import { categoryService, type APICategory } from '../services/categoryService';
 import { brandService, type APIBrand } from '../services/brandService';
 import { DeleteConfirmationModal } from '../components/modals/DeleteConfirmationModal';
 import { SearchableSelect } from '../components/ui/searchable-select';
-import { 
+import {
   Package, Search, Plus, Edit, Trash2,
   Cpu, Monitor, HardDrive, MemoryStick, Keyboard,
   Calendar, DollarSign, X, Filter, ChevronLeft, ChevronRight,
@@ -19,6 +19,7 @@ import {
   Barcode, ArrowUpCircle, ArrowDownCircle, ShoppingCart, Eye,
   BadgeDollarSign, PieChart, Loader2, AlertCircle, CheckCircle2
 } from 'lucide-react';
+import { getImageUrl } from '../lib/utils';
 
 // Helper to convert API Product to frontend Product format
 const convertAPIProductToFrontend = (apiProduct: APIProduct): Product => ({
@@ -356,7 +357,7 @@ export const Products: React.FC = () => {
     if (product.image) {
       return (
         <img 
-          src={product.image} 
+          src={getImageUrl(product.image)} 
           alt={product.name}
           className={`${sizeClasses[size]} rounded-lg object-cover flex-shrink-0`}
         />
@@ -1681,7 +1682,7 @@ export const Products: React.FC = () => {
                 <div className="flex items-start justify-between gap-3">
                   {product.image ? (
                     <img 
-                      src={product.image} 
+                      src={getImageUrl(product.image)} 
                       alt={product.name}
                       className="w-12 h-12 rounded-xl object-cover"
                     />
