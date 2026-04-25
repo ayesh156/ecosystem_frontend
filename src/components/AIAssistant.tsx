@@ -751,15 +751,13 @@ How can I help you today? 😊`,
                   >
                     <Trash2 className="w-3.5 h-3.5 text-white/80" />
                   </button>
-                  {!hasEnvKey && (
-                    <button
-                      onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-                      className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
-                      title="API Settings"
-                    >
-                      <Settings className="w-3.5 h-3.5 text-white/80" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                    className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+                    title="API Settings"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-white/80" />
+                  </button>
                   <button
                     onClick={() => {
                       setIsOpen(false);
@@ -796,16 +794,35 @@ How can I help you today? 😊`,
           {/* API Key Settings Dropdown */}
           {showApiKeyInput && hasApiKey && (
             <div className={`relative px-3 py-2 border-t ${
-              theme === 'dark' ? 'bg-slate-800/50 border-white/10' : 'bg-white/10 border-white/20'
+              theme === 'dark' ? 'bg-slate-800/50 border-white/10' : 'bg-white/10 border-white/20'\
             }`}>
-              <button
-                onClick={handleRemoveApiKey}
-                className="w-full px-3 py-1.5 rounded-lg bg-red-500/20 text-red-100 hover:bg-red-500/30 text-xs transition-colors"
-              >
-                Remove API Key
-              </button>
+              <p className="text-white/70 text-[10px] mb-1.5">Update Gemini API Key</p>
+              <div className="flex gap-1.5">
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="Paste new API key..."
+                  className={`flex-1 px-2.5 py-1.5 rounded-lg border text-xs ${
+                    theme === 'dark'
+                      ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400'
+                      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                  } focus:outline-none focus:ring-1 focus:ring-emerald-400`}
+                />
+                <button
+                  onClick={handleSaveApiKey}
+                  disabled={!apiKeyInput.trim()}
+                  className="px-2.5 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-medium disabled:opacity-40 hover:bg-emerald-400 transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+              {hasEnvKey && (
+                <p className="text-emerald-200/60 text-[10px] mt-1">Saving will override the env key for this browser</p>
+              )}
             </div>
           )}
+
         </div>
 
         {/* Content */}
