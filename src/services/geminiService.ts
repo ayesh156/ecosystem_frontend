@@ -232,11 +232,28 @@ class GeminiService {
       const url = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
       console.log(`🤖 Trying Gemini model: ${model}`);
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
+      // Retry loop for 429 rate-limit errors (up to 3 retries)
+      const MAX_RETRIES = 3;
+      let response: Response | null = null;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        // If rate-limited and we still have retries left, wait and retry
+        if (response.status === 429 && attempt < MAX_RETRIES) {
+          const waitMs = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+          console.warn(`⏳ Rate limited (429), retrying in ${waitMs / 1000}s... (attempt ${attempt + 1}/${MAX_RETRIES})`);
+          await new Promise(resolve => setTimeout(resolve, waitMs));
+          continue;
+        }
+        break;
+      }
+
+      if (!response) continue;
 
       // 404 = model not available for this API key → try next
       if (response.status === 404) {
