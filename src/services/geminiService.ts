@@ -143,14 +143,27 @@ PERSONALITY:
 
 Remember: You represent ECOTEC - a premium computer and mobile shop in Sri Lanka. Be proud of the system and help users make the most of it!`;
 
+// Ordered list of models to try — first one that works gets cached
+const GEMINI_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite', 
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash',
+];
+
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
 class GeminiService {
   private apiKey: string | null = null;
-  private baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
   private conversationHistory: ChatMessage[] = [];
+  // Cache the working model so we don't retry every time
+  private workingModel: string | null = null;
 
   constructor() {
     // Initialize API key from environment variable or localStorage
     this.initApiKey();
+    // Restore cached working model
+    this.workingModel = localStorage.getItem('ecotec_gemini_model');
   }
 
   private initApiKey() {
@@ -199,6 +212,56 @@ class GeminiService {
     localStorage.removeItem('ecotec_gemini_api_key');
     // Re-init to pick up env key if available
     this.initApiKey();
+  }
+
+  /**
+   * Try to call the Gemini API with automatic model fallback.
+   * If the cached model works → use it.
+   * If it returns 404 → try the next model in GEMINI_MODELS.
+   * Cache the first working model in localStorage so subsequent calls are instant.
+   */
+  private async fetchWithModelFallback(apiKey: string, requestBody: object): Promise<Response> {
+    // Build the list: cached model first, then the rest
+    const modelsToTry = this.workingModel
+      ? [this.workingModel, ...GEMINI_MODELS.filter(m => m !== this.workingModel)]
+      : [...GEMINI_MODELS];
+
+    let lastResponse: Response | null = null;
+
+    for (const model of modelsToTry) {
+      const url = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
+      console.log(`🤖 Trying Gemini model: ${model}`);
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      // 404 = model not available for this API key → try next
+      if (response.status === 404) {
+        console.warn(`⚠️ Model ${model} not available (404), trying next...`);
+        // Clear cached model if it was the one that failed
+        if (this.workingModel === model) {
+          this.workingModel = null;
+          localStorage.removeItem('ecotec_gemini_model');
+        }
+        lastResponse = response;
+        continue;
+      }
+
+      // Any other status (200, 400, 403, 429...) = model exists, return the response
+      if (this.workingModel !== model) {
+        this.workingModel = model;
+        localStorage.setItem('ecotec_gemini_model', model);
+        console.log(`✅ Cached working model: ${model}`);
+      }
+      return response;
+    }
+
+    // All models returned 404 — return the last response so caller handles the error
+    console.error('❌ All Gemini models returned 404');
+    return lastResponse!;
   }
 
   clearHistory() {
@@ -252,47 +315,43 @@ ${conversationContext}
 ${finalInstructions}`;
 
     try {
-      const response = await fetch(`${this.baseUrl}?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const requestBody = {
+        contents: [
+          {
+            parts: [
+              {
+                text: fullPrompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: fullPrompt
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 2048,
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
           },
-          safetySettings: [
-            {
-              category: "HARM_CATEGORY_HARASSMENT",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-              category: "HARM_CATEGORY_HATE_SPEECH",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-              threshold: "BLOCK_MEDIUM_AND_ABOVE"
-            }
-          ]
-        })
-      });
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          }
+        ]
+      };
+
+      const response = await this.fetchWithModelFallback(apiKey, requestBody);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -389,14 +448,12 @@ Categories: processors, graphics-cards, memory, storage, motherboards, power-sup
 
 Focus on accuracy with real product names and realistic Sri Lankan market prices.`;
 
-      const response = await fetch(`${this.baseUrl}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
-        })
-      });
+      const requestBody = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+      };
+
+      const response = await this.fetchWithModelFallback(apiKey, requestBody);
 
       if (!response.ok) return [];
 
@@ -437,8 +494,7 @@ Focus on accuracy with real product names and realistic Sri Lankan market prices
     }
 
     try {
-      // Use Gemini Vision model
-      const visionUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+      // Use Gemini Vision model (with auto-fallback)
       
       const prompt = `You are an expert tech product identifier with knowledge of Sri Lankan market prices.
 
@@ -474,24 +530,22 @@ Be accurate and extract as much detail as possible from the image. If you cannot
       else if (base64Image.includes('data:image/webp')) mimeType = 'image/webp';
       else if (base64Image.includes('data:image/gif')) mimeType = 'image/gif';
 
-      const response = await fetch(`${visionUrl}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: imageData
-                }
+      const requestBody = {
+        contents: [{
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: imageData
               }
-            ]
-          }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
-        })
-      });
+            }
+          ]
+        }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
+      };
+
+      const response = await this.fetchWithModelFallback(apiKey, requestBody);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -530,14 +584,12 @@ Category: ${category}
 
 Keep it concise (2-3 sentences), highlight key features and benefits. Use professional language suitable for an e-commerce site in Sri Lanka.`;
 
-      const response = await fetch(`${this.baseUrl}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 256 },
-        })
-      });
+      const requestBody = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 256 },
+      };
+
+      const response = await this.fetchWithModelFallback(apiKey, requestBody);
 
       if (!response.ok) return '';
 
@@ -761,17 +813,15 @@ For EXPENSE LIST:
 `;
 
     try {
-      const response = await fetch(`${this.baseUrl}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: analysisPrompt }] }],
-          generationConfig: { 
-            temperature: 0.3, // Lower temperature for more factual responses
-            maxOutputTokens: 2048 
-          },
-        })
-      });
+      const requestBody = {
+        contents: [{ parts: [{ text: analysisPrompt }] }],
+        generationConfig: { 
+          temperature: 0.3, // Lower temperature for more factual responses
+          maxOutputTokens: 2048 
+        },
+      };
+
+      const response = await this.fetchWithModelFallback(apiKey, requestBody);
 
       if (!response.ok) {
         throw new Error('Failed to analyze data');
