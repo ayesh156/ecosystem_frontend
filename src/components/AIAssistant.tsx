@@ -125,16 +125,6 @@ How can I help you today? 😊`,
     }
   };
 
-  const handleRemoveApiKey = () => {
-    // Don't allow removing if using env key
-    if (hasEnvKey) return;
-    
-    geminiService.removeApiKey();
-    setHasApiKey(false);
-    setMessages([]);
-    geminiService.clearHistory();
-  };
-
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
