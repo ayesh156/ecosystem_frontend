@@ -29,6 +29,7 @@ import {
   replaceLogo,
   isSupabaseConfigured,
 } from '../services/supabaseStorageService';
+import { uploadShopLogo } from '../services/imageUploadService';
 import { PrintableInvoice } from '../components/PrintableInvoice';
 
 // Mock invoice for preview
@@ -152,11 +153,18 @@ export const ShopSettings: React.FC = () => {
 
       // Check if Supabase is configured
       if (!isSupabaseConfigured()) {
-        // Use local data URL if Supabase not configured
-        setLogoPreview(compressed.dataUrl);
-        updateBranding({ logo: compressed.dataUrl });
-        toast.success('Logo updated (local mode - Supabase not configured)');
-        setIsUploadingLogo(false);
+        try {
+          // Upload to local backend instead of using dataUrl
+          const result = await uploadShopLogo(compressed.file);
+          setLogoPreview(result.url);
+          updateBranding({ logo: result.url });
+          toast.success('Logo uploaded successfully!');
+        } catch (uploadError) {
+          console.error('Local upload failed:', uploadError);
+          toast.error('Failed to upload logo to server');
+        } finally {
+          setIsUploadingLogo(false);
+        }
         return;
       }
 

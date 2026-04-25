@@ -43,6 +43,31 @@ export async function uploadProductImage(file: File): Promise<UploadResult> {
 }
 
 /**
+ * Uploads a shop logo to the local backend
+ */
+export async function uploadShopLogo(file: File): Promise<UploadResult> {
+  const formData = new FormData();
+  formData.append('image', file);
+
+  const response = await fetchWithAuth('/api/v1/upload/shop-logo', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Upload failed' }));
+    throw new Error(errorData.message || 'Failed to upload logo');
+  }
+
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(result.message || 'Upload failed');
+  }
+
+  return result.data;
+}
+
+/**
  * Deletes an uploaded product image
  */
 export async function deleteProductImage(filename: string): Promise<void> {
