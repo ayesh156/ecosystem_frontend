@@ -612,7 +612,7 @@ export const InvoiceEditModal: React.FC<InvoiceEditModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className={`w-full max-w-4xl p-0 !rounded-none sm:!rounded-2xl fixed sm:relative inset-0 sm:inset-auto translate-x-0 translate-y-0 sm:translate-x-[-50%] sm:translate-y-[-50%] h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden ${
+      <DialogContent className={`w-full max-w-4xl p-0 !rounded-none sm:!rounded-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden ${
         theme === 'dark' ? 'bg-slate-900 border-slate-700/50' : 'bg-white border-slate-200'
       }`}>
         <DialogHeader className="sr-only">
