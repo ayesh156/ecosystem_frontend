@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Product } from '../../data/mockData';
 import { generateSerialNumber } from '../../data/mockData';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { SearchableSelect } from '../ui/searchable-select';
@@ -15,7 +14,8 @@ import { productService, type CreateProductDTO, type APIProduct, type ProductSug
 import { categoryService, type APICategory } from '../../services/categoryService';
 import { brandService, type APIBrand } from '../../services/brandService';
 import { geminiService } from '../../services/geminiService';
-import * as productImageService from '../../services/productImageService';
+import { uploadProductImage, deleteProductImage } from '../../services/imageUploadService';
+import { compressImage, validateImageFile } from '../../lib/imageCompression';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -66,7 +66,6 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   shopId,
 }) => {
   const { theme, aiAutoFillEnabled } = useTheme();
-  const authContext = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState<ProductFormData>({
@@ -285,26 +284,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
   // Handle image upload with AI analysis
   const handleImageUpload = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      setErrors(prev => ({ ...prev, image: 'Please select an image file' }));
-      return;
-    }
-
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-      setErrors(prev => ({ ...prev, image: 'Image must be less than 10MB' }));
-      return;
-    }
-
-    // Check Supabase configuration
-    if (!productImageService.isSupabaseConfigured()) {
-      setErrors(prev => ({ ...prev, image: 'Image storage not configured. Please contact administrator.' }));
-      return;
-    }
-
-    const shopId = authContext?.user?.shop?.id;
-    if (!shopId) {
-      setErrors(prev => ({ ...prev, image: 'Shop ID required for upload. Please log in again.' }));
+    // Validate image file
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setErrors(prev => ({ ...prev, image: validation.error || 'Invalid image file' }));
       return;
     }
 
@@ -315,19 +298,21 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     try {
       // Step 1: Compress the image
       setUploadProgress(20);
-      const compressedFile = await productImageService.compressImage(file, 800, 0.8);
+      const compressedResult = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.8 });
       
-      // Step 2: Analyze image with AI (only for new products)
+      // Step 2: Upload to local backend
+      setUploadProgress(60);
+      const uploadResult = await uploadProductImage(compressedResult.file);
+      
+      // Step 3: Set the image URL in form data
+      setUploadProgress(100);
+      setFormData(prev => ({ ...prev, image: uploadResult.url }));
+      
+      // Step 4: Analyze image with AI (only for new products)
       if (!product && aiAutoFillEnabled) {
-        setUploadProgress(40);
         setIsAnalyzingImage(true);
         try {
-          const base64Image = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(compressedFile);
-          });
+          const base64Image = compressedResult.dataUrl;
           
           const analysisResult = await geminiService.analyzeProductImage(base64Image);
           
@@ -404,34 +389,17 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           setIsAnalyzingImage(false);
         }
       }
-      
-      // Step 3: Upload to Supabase
-      setUploadProgress(50);
-      const uploadResult = await productImageService.uploadProductImage(
-        compressedFile,
-        shopId,
-        product?.id
-      );
-      
-      if (!uploadResult.success) {
-        setErrors(prev => ({ ...prev, image: uploadResult.error || 'Failed to upload image' }));
-        setIsUploading(false);
-        setUploadProgress(0);
-        return;
-      }
-
-      setUploadProgress(100);
-      setTimeout(() => {
-        setFormData(prev => ({ ...prev, image: uploadResult.url || '' }));
-        setIsUploading(false);
-        setUploadProgress(0);
-      }, 300);
-    } catch {
-      setErrors(prev => ({ ...prev, image: 'Failed to process image' }));
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setErrors(prev => ({ 
+        ...prev, 
+        image: error instanceof Error ? error.message : 'Failed to upload image' 
+      }));
+    } finally {
       setIsUploading(false);
       setUploadProgress(0);
     }
-  }, [authContext?.user?.shop?.id, product, aiAutoFillEnabled, apiBrands, apiCategories]);
+  }, [product, aiAutoFillEnabled, apiBrands, apiCategories]);
 
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -489,12 +457,19 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
   // Remove image
   const handleRemoveImage = async () => {
-    if (formData.image && formData.image.includes('supabase')) {
-      try {
-        await productImageService.deleteProductImage(formData.image);
-      } catch (error) {
-        console.error('Failed to delete image:', error);
+    if (formData.image) {
+      // Check if it's a local upload (starts with /uploads/)
+      if (formData.image.startsWith('/uploads/')) {
+        try {
+          const filename = formData.image.split('/').pop();
+          if (filename) {
+            await deleteProductImage(filename);
+          }
+        } catch (error) {
+          console.error('Failed to delete image:', error);
+        }
       }
+      // For Supabase URLs or other external URLs, we don't delete them
     }
     setFormData(prev => ({ ...prev, image: '' }));
   };

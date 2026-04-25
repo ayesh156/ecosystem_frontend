@@ -7,8 +7,8 @@ import { geminiService } from '../services/geminiService';
 import { productService, type CreateProductDTO, type APIProduct, type ProductSuggestion } from '../services/productService';
 import { categoryService, type APICategory } from '../services/categoryService';
 import { brandService, type APIBrand } from '../services/brandService';
-import * as productImageService from '../services/productImageService';
-import { useAuth } from '../contexts/AuthContext';
+import { uploadProductImage } from '../services/imageUploadService';
+import { compressImage, validateImageFile } from '../lib/imageCompression';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
@@ -89,7 +89,6 @@ interface ProductFormData {
 export const ProductForm: React.FC = () => {
   const { theme, aiAutoFillEnabled } = useTheme();
   const { loadProducts, currentShopId } = useDataCache();
-  const authContext = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditing = !!id;
@@ -308,27 +307,10 @@ export const ProductForm: React.FC = () => {
       return bestScore > 0.4 ? bestMatch : undefined;
     };
 
-    if (!file.type.startsWith('image/')) {
-      setErrors(prev => ({ ...prev, image: 'Please select an image file' }));
-      return;
-    }
-
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-      setErrors(prev => ({ ...prev, image: 'Image must be less than 10MB' }));
-      return;
-    }
-
-    // Check Supabase configuration
-    if (!productImageService.isSupabaseConfigured()) {
-      setErrors(prev => ({ ...prev, image: 'Image storage not configured. Please contact administrator.' }));
-      return;
-    }
-
-    // Check shopId
-    const shopId = authContext?.user?.shop?.id;
-    if (!shopId) {
-      setErrors(prev => ({ ...prev, image: 'Shop ID required for upload. Please log in again.' }));
+    // Validate image file
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setErrors(prev => ({ ...prev, image: validation.error || 'Invalid image file' }));
       return;
     }
 
@@ -339,20 +321,21 @@ export const ProductForm: React.FC = () => {
     try {
       // Step 1: Compress the image
       setUploadProgress(20);
-      const compressedFile = await productImageService.compressImage(file, 800, 0.8);
+      const compressedResult = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.8 });
       
-      // Step 2: Analyze image with Gemini Vision to extract product details
-      // Skip AI analysis when editing a product (user might just want to change image)
+      // Step 2: Upload to local backend
+      setUploadProgress(60);
+      const uploadResult = await uploadProductImage(compressedResult.file);
+      
+      // Step 3: Set the image URL in form data
+      setUploadProgress(100);
+      setFormData(prev => ({ ...prev, image: uploadResult.url }));
+      
+      // Step 4: Analyze image with Gemini Vision to extract product details (if enabled)
       if (!isEditing && aiAutoFillEnabled) {
-        setUploadProgress(40);
         setIsAnalyzingImage(true);
         try {
-          const base64Image = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target?.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(compressedFile);
-          });
+          const base64Image = compressedResult.dataUrl;
           
           const analysisResult = await geminiService.analyzeProductImage(base64Image);
           
@@ -519,35 +502,17 @@ export const ProductForm: React.FC = () => {
           setIsAnalyzingImage(false);
         }
       }
-      
-      // Step 3: Upload to Supabase
-      setUploadProgress(50);
-      const uploadResult = await productImageService.uploadProductImage(
-        compressedFile,
-        shopId,
-        isEditing ? id : undefined
-      );
-      
-      if (!uploadResult.success) {
-        setErrors(prev => ({ ...prev, image: uploadResult.error || 'Failed to upload image' }));
-        setIsUploading(false);
-        setUploadProgress(0);
-        return;
-      }
-
-      setUploadProgress(100);
-      setTimeout(() => {
-        // Store the Supabase URL
-        setFormData(prev => ({ ...prev, image: uploadResult.url || '' }));
-        setIsUploading(false);
-        setUploadProgress(0);
-      }, 300);
-    } catch {
-      setErrors(prev => ({ ...prev, image: 'Failed to process image' }));
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setErrors(prev => ({ 
+        ...prev, 
+        image: error instanceof Error ? error.message : 'Failed to upload image' 
+      }));
+    } finally {
       setIsUploading(false);
       setUploadProgress(0);
     }
-  }, [authContext?.user?.shop?.id, isEditing, id, aiAutoFillEnabled, apiBrands, apiCategories]);
+  }, [isEditing, aiAutoFillEnabled, apiBrands, apiCategories]);
 
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
