@@ -794,7 +794,7 @@ How can I help you today? 😊`,
           {/* API Key Settings Dropdown */}
           {showApiKeyInput && hasApiKey && (
             <div className={`relative px-3 py-2 border-t ${
-              theme === 'dark' ? 'bg-slate-800/50 border-white/10' : 'bg-white/10 border-white/20'\
+              theme === 'dark' ? 'bg-slate-800/50 border-white/10' : 'bg-white/10 border-white/20'
             }`}>
               <p className="text-white/70 text-[10px] mb-1.5">Update Gemini API Key</p>
               <div className="flex gap-1.5">
